@@ -153,14 +153,14 @@ jobs:
         run: |
           echo "Building JAR with version: $VERSION"
           mvn clean package -DskipTests
-          ls -la target/
+          find . -name "*.jar"
 
       - name: Verify JAR File
         run: |
           echo "Verifying JAR file with version: $VERSION"
-          if [ ! -f "target/blog-app-$VERSION.jar" ]; then
+          if [ ! -f "blog-service/target/blog-app-$VERSION.jar" ]; then
             echo "❌ JAR file not found!"
-            ls -la target/
+            find . -name "*.jar"
             exit 1
           fi
-          echo "✅ Found JAR file: target/blog-app-$VERSION.jar"
+          echo "✅ Found JAR file: blog-service/target/blog-app-$VERSION.jar"
