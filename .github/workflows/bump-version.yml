@@ -26,7 +26,24 @@ jobs:
       - name: Install xmllint
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
 
+      - name: Set up Git for pushing
+        run: |
+          git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run bump-semver.sh
         run: |
           chmod +x bump-semver.sh
-          ./bump-semver.sh 
+          ./bump-semver.sh
+
+      - name: Show new version
+        run: xmllint --xpath "/*[local-name()='project']/*[local-name()='version']/text()" pom.xml
+
+      - name: Upload updated POMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-poms
+          path: |
+            pom.xml
+            */pom.xml 
