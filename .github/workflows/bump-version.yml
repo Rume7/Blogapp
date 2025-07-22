@@ -53,7 +53,10 @@ jobs:
           # Update version in <parent> tag for all module pom.xml files
           # This iterates through all pom.xml files found in subdirectories
           # and updates the <version> tag within their <parent> section.
-          find . -name "pom.xml" -not -path "./pom.xml" -exec sed -i "s|<parent>\s*<groupId>com.codehacks</groupId>\s*<artifactId>Blogapp</artifactId>\s*<version>$CURRENT_PARENT_VERSION</version>|<parent>\n        <groupId>com.codehacks</groupId>\n        <artifactId>Blogapp</artifactId>\n        <version>$NEW_VERSION</version>|g" {} \;
+          # The sed command now uses a range address (/<parent>/,/<\/parent>/)
+          # to limit the substitution to lines between the <parent> and </parent> tags,
+          # making it more robust.
+          find . -name "pom.xml" -not -path "./pom.xml" -exec sed -i "/<parent>/,/<\/parent>/ s|<version>$CURRENT_PARENT_VERSION</version>|<version>$NEW_VERSION</version>|g" {} \;
 
           # Output the new version for subsequent steps
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
