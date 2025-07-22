@@ -158,9 +158,9 @@ jobs:
       - name: Verify JAR File
         run: |
           echo "Verifying JAR file with version: $VERSION"
-          if [ ! -f "blog-service/target/blog-app-$VERSION.jar" ]; then
+          if [ ! -f "blog-service/target/blog-service-$VERSION.jar" ]; then
             echo "❌ JAR file not found!"
             find . -name "*.jar"
             exit 1
           fi
-          echo "✅ Found JAR file: blog-service/target/blog-app-$VERSION.jar"
+          echo "✅ Found JAR file: blog-service/target/blog-service-$VERSION.jar"
