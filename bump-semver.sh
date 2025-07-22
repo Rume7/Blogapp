@@ -18,13 +18,15 @@ BUMP_TYPE="patch"
 # Try to get PR labels from GitHub API if GITHUB_TOKEN and PR number are available
 if [[ -n "$GITHUB_TOKEN" && -n "$PR_NUMBER" ]]; then
   LABELS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-    "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" | jq -r '.labels[].name')
-  if echo "$LABELS" | grep -q "bump:major"; then
-    BUMP_TYPE="major"
-  elif echo "$LABELS" | grep -q "bump:minor"; then
-    BUMP_TYPE="minor"
-  elif echo "$LABELS" | grep -q "bump:patch"; then
-    BUMP_TYPE="patch"
+    "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" | jq -r '.labels[].name // empty')
+  if [ -n "$LABELS" ]; then
+    if echo "$LABELS" | grep -q "bump:major"; then
+      BUMP_TYPE="major"
+    elif echo "$LABELS" | grep -q "bump:minor"; then
+      BUMP_TYPE="minor"
+    elif echo "$LABELS" | grep -q "bump:patch"; then
+      BUMP_TYPE="patch"
+    fi
   fi
 fi
 
