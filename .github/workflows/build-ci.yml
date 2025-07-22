@@ -1,0 +1,166 @@
+name: Blog-App CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main          # Full CI/CD for main branch
+      - '**'          # CI only for all other branches
+  pull_request:
+    branches:
+      - main          # CI only for PRs to main
+      - '**'          # CI only for PRs to any branch
+
+jobs:
+  analyze:
+    name: CodeQL ${{ matrix.language }} Analysis
+    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    permissions:
+      security-events: write
+      packages: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  Test:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: true
+      TESTCONTAINERS_CHECKS_DISABLE: true
+      TESTCONTAINERS_REUSE_ENABLE: true
+      SPRING_PROFILES_ACTIVE: test
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: blog_test_db
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Verify PostgreSQL Connection
+        run: |
+          sudo apt-get install -y postgresql-client
+          for i in {1..10}; do
+            if PGPASSWORD=test psql -h localhost -U test -d blog_test_db -c "SELECT version();" > /dev/null 2>&1; then
+              echo "✅ PostgreSQL is ready!"
+              break
+            fi
+            echo "⏳ Waiting for PostgreSQL to be ready... ($i/10)"
+            sleep 5
+          done
+
+      - name: Run Tests
+        run: mvn clean verify -Dspring.testcontainers.reuse.enable=true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: target/surefire-reports/
+
+      - name: Generate coverage report
+        run: mvn jacoco:report
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./target/site/jacoco/jacoco.xml
+
+  Build-and-Deploy:
+    needs: [ analyze, test ]
+    runs-on: ubuntu-22.04
+    # Build for all branches, but only deploy on main
+    if: needs.test.result == 'success'
+
+    permissions:
+      contents: write
+      packages: write
+      actions: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set Up Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            image=moby/buildkit:master
+            network=host
+
+      - name: Get version from pom.xml
+        id: get_version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using version: $VERSION"
+
+      - name: Build JAR with version
+        run: |
+          echo "Building JAR with version: $VERSION"
+          mvn clean package -DskipTests
+          find . -name "*.jar"
+
+      - name: Verify JAR File
+        run: |
+          echo "Verifying JAR file with version: $VERSION"
+          if [ ! -f "blog-service/target/blog-service-$VERSION.jar" ]; then
+            echo "❌ JAR file not found!"
+            find . -name "*.jar"
+            exit 1
+          fi
+          echo "✅ Found JAR file: blog-service/target/blog-service-$VERSION.jar"
