@@ -32,16 +32,30 @@ jobs:
       - name: Install xmllint
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
 
-      - name: Bump Version in pom.xml
+      - name: Bump Version in Parent and Modules
         id: bump_version
         run: |
-          CURRENT_VERSION=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='version']/text()" pom.xml)
-          echo "Current version: $CURRENT_VERSION"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          # Get current version from parent pom.xml
+          CURRENT_PARENT_VERSION=$(xmllint --xpath "/*[local-name()='project']/*[local-name()='version']/text()" pom.xml)
+          echo "Current parent version: $CURRENT_PARENT_VERSION"
+
+          # Parse major, minor, patch components
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_PARENT_VERSION"
+
+          # Increment the patch version
           NEW_PATCH=$((PATCH + 1))
           NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
           echo "New version: $NEW_VERSION"
-          sed -i "s|<version>$CURRENT_VERSION</version>|<version>$NEW_VERSION</version>|g" pom.xml
+
+          # Update parent pom.xml with the new version
+          sed -i "s|<version>$CURRENT_PARENT_VERSION</version>|<version>$NEW_VERSION</version>|g" pom.xml
+
+          # Update version in <parent> tag for all module pom.xml files
+          # This iterates through all pom.xml files found in subdirectories
+          # and updates the <version> tag within their <parent> section.
+          find . -name "pom.xml" -not -path "./pom.xml" -exec sed -i "s|<parent>\s*<groupId>com.codehacks</groupId>\s*<artifactId>Blogapp</artifactId>\s*<version>$CURRENT_PARENT_VERSION</version>|<parent>\n        <groupId>com.codehacks</groupId>\n        <artifactId>Blogapp</artifactId>\n        <version>$NEW_VERSION</version>|g" {} \;
+
+          # Output the new version for subsequent steps
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check for changes
@@ -56,7 +70,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
-          git add pom.xml
+          git add pom.xml # Add the root pom.xml
+          git add */pom.xml # Add all modified module pom.xml files
           git commit -m "chore: Bump version to $NEW_VERSION [skip ci]"
           git push "https://x-oauth-basic:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
