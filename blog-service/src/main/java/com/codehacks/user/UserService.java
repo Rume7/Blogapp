@@ -32,10 +32,12 @@ class UserService {
         if (userRepository.findByEmail(userRequest.email()).isPresent()) {
             throw new IllegalArgumentException("Email already exists");
         }
+
         User user = new User();
         user.setUsername(userRequest.username());
         user.setEmail(userRequest.email());
         user.setPassword(passwordEncoder.encode(userRequest.password()));
+
         return UserResponse.fromUser(userRepository.save(user));
     }
 
